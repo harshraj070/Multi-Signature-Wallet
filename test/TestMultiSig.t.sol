@@ -10,7 +10,8 @@ contract TestMultiSig is Test {
     address owner2 = address(0x2);
     address owner3 = address(0x3);
     address nonOwner = address(0x4);
-    uint245 approvalsRequired = 2;
+    address recipient = address(0x5);
+    uint256 approvalsRequired = 2;
 
     function setUp() public {
         address[] memory owners = new address[](3);
@@ -22,11 +23,60 @@ contract TestMultiSig is Test {
 
     function testSubmitTransaction() public {
         vm.prank(owner1);
-        wallet.submitTransaction(receipient, 1 ether, "");
+        wallet.submitTransaction(recipient, 1 ether, "");
         (address to, uint256 value, , bool executed) = wallet.getTransaction(0);
 
-        assertEq(to, receipient);
+        assertEq(to, recipient);
         assertEq(value, 1 ether);
         assertFalse(executed);
+    }
+
+    function testApproveTransaction() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        assertEq(wallet.getApprovalCount(0), 1);
+    }
+
+    function testTransactionExecuted() public {
+        vm.deal(address(wallet), 2 ether);
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner3);
+        wallet.approveTransaction(0);
+
+        (, , , bool executedBefore) = wallet.getTransaction(0);
+        assertFalse(executedBefore);
+
+        wallet.executeTransaction(0);
+        (, , , bool executedAfter) = wallet.getTransaction(0);
+        assertTrue(executedAfter);
+    }
+
+    function testRevokeAppeal() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        assertEq(wallet.getApprovalCount(0), 1);
+
+        vm.prank(owner2);
+        wallet.revokeApproval(0);
+        assertEq(wallet.getApprovalCount(0), 0);
+    }
+
+    function testNonOwnerCannotSubmitTransaction() public {
+        vm.expectRevert("Only Owner can call this function");
+        vm.prank(nonOwner);
+        wallet.submitTransaction(recipient, 1 ether, "");
     }
 }
